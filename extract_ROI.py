@@ -5,7 +5,8 @@ def extract_ROI(img, constant_threshold=10):
     # 将图像转换为灰度图像
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     cv2.imwrite("gray.jpg", gray)
-    # 对图像进行自适应阈值处理
+
+    # 阈值化
     threshshold = gray.min() + constant_threshold
     _, thresh = cv2.threshold(gray, threshshold, 255, cv2.THRESH_BINARY)
 

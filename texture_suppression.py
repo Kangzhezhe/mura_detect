@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-
+from tqdm import tqdm
 # 绘制频谱图
 def show_fft(magnitude_spectrum,figname="fft_magnitude_spectrum.png"):
     plt.figure(figsize=(8, 8))
@@ -14,26 +14,38 @@ def show_fft(magnitude_spectrum,figname="fft_magnitude_spectrum.png"):
 # img = cv2.imread("Visualize/斜纹/20210116_164449_Main_0_4_W128_Org.jpg")
 # cv2.imwrite("img.jpg",img)
 
-def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 1000 ,kernel_ratio = 10, debug=False):
+def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 800 ,kernel_ratio = 10, lowpass_radius = 1000,debug=False):
     # 将彩色图像转换为灰度图像
     grayscale_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 对灰度图像进行傅立叶变换
     fourier_transform = np.fft.fft2(grayscale_image)
+
+    # 低通滤波
+    fshift = np.fft.fftshift(fourier_transform)
+    rows, cols = fshift.shape
+    crow, ccol = rows // 2, cols // 2
+    mask = np.zeros((rows, cols), np.uint8)
+    rr, cc = np.ogrid[:rows, :cols]
+    distance = np.sqrt((rr - crow) ** 2 + (cc - ccol) ** 2)
+    mask[distance < lowpass_radius] = 1
+    fshift = fshift * mask
+    fourier_transform = np.fft.ifftshift(fshift)
+
     # 计算傅立叶变换后的频谱
     magnitude_spectrum = np.fft.fftshift(np.abs(fourier_transform))
 
     # 获得纹理频谱特征
     mask = magnitude_spectrum > max_spec_amp*np.max(magnitude_spectrum)
     zeroed_fourier_transform = np.multiply(magnitude_spectrum, mask)
-    zeroed_fourier_transform = zeroed_fourier_transform.astype(np.uint8)
+    zeroed_fourier_transform = np.clip(zeroed_fourier_transform, 0, 255).astype(np.uint8)
 
     # 增强纹理频谱特征
     kernel_size = 5
     kernel = np.ones((kernel_size, kernel_size), np.uint8)
     eroded_image = cv2.erode(zeroed_fourier_transform, kernel, iterations=1)
-    # show_fft(eroded_image,'eroded_magnitude_spectrum.png')
+    if debug : show_fft(eroded_image,'eroded_magnitude_spectrum.png')
     dilated_image = cv2.dilate(eroded_image, kernel, iterations=1)
-    # show_fft(dilated_image,'dilated_magnitude_spectrum.png')
+    if debug : show_fft(dilated_image,'dilated_magnitude_spectrum.png')
 
     # 找到高亮纹理频谱中心点的位置
     contours, _ = cv2.findContours(dilated_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -71,7 +83,7 @@ def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 1000
         masked = cv2.bitwise_and(masked, ~mask)
 
     # 显示掩模
-    # cv2.imwrite("spec_mask.jpg",masked*255)
+    if debug: cv2.imwrite("spec_mask.jpg",masked*255)
     # zeroed_fourier_transform_masked = cv2.bitwise_and(zeroed_fourier_transform, masked)
     # show_fft(zeroed_fourier_transform_masked,'zeroed_magnitude_spectrum_masked')
     # import ipdb; ipdb.set_trace()
@@ -82,17 +94,23 @@ def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 1000
     reconstructed_image_spec = np.multiply(masked_ishift, fourier_transform)
     if debug : show_fft(np.abs(reconstructed_image_spec),'reconstructed')
     reconstructed_image = np.fft.ifft2(reconstructed_image_spec).real
-    # cv2.imwrite("reconstructed_image.jpg",reconstructed_image)
-    reconstructed_color_image = cv2.cvtColor(reconstructed_image.astype(np.uint8), cv2.COLOR_GRAY2BGR)
+    if debug: cv2.imwrite("reconstructed_image.jpg",reconstructed_image)
     return reconstructed_image
 
+
+debug = False
+
 if __name__ == '__main__':
-    data_path = "Visualize/"
-    problem_list = os.listdir(data_path)
-    for problem_name in problem_list:
-        img_list = os.listdir(os.path.join(data_path, problem_name))
-        os.makedirs("Texture/{}/".format(problem_name), exist_ok=True)
-        for img_name in img_list:
-            img = cv2.imread(os.path.join(data_path, problem_name, img_name))
-            output = texture_suppression(img)
-            cv2.imwrite("Texture/{}/{}.jpg".format(problem_name, img_name.split(".")[0]), output)
+    if debug:
+        img = cv2.imread("Visualize/斜纹/20210116_164449_Main_0_4_W128_Org.jpg")
+        output = texture_suppression(img,debug=True)
+    else:
+        data_path = "Visualize/"
+        problem_list = os.listdir(data_path)
+        for problem_name in tqdm(problem_list):
+            img_list = os.listdir(os.path.join(data_path, problem_name))
+            os.makedirs("Texture/{}/".format(problem_name), exist_ok=True)
+            for img_name in tqdm(img_list):
+                img = cv2.imread(os.path.join(data_path, problem_name, img_name))
+                output = texture_suppression(img)
+                cv2.imwrite("Texture/{}/{}.jpg".format(problem_name, img_name.split(".")[0]), output)
