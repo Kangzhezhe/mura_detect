@@ -11,24 +11,26 @@ def show_fft(magnitude_spectrum,figname="fft_magnitude_spectrum.png"):
     plt.axis('off')
     plt.savefig(figname)
 
-# img = cv2.imread("Visualize/斜纹/20210116_164449_Main_0_4_W128_Org.jpg")
-# cv2.imwrite("img.jpg",img)
-
-def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 800 ,kernel_ratio = 10, lowpass_radius = 1000,debug=False):
+def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 300,kernel_ratio = 10, lowpass_radius = 300,debug=False):
     # 将彩色图像转换为灰度图像
     grayscale_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # 对灰度图像进行傅立叶变换
     fourier_transform = np.fft.fft2(grayscale_image)
 
     # 低通滤波
+    order = 4
+    cutoff = 150
     fshift = np.fft.fftshift(fourier_transform)
     rows, cols = fshift.shape
     crow, ccol = rows // 2, cols // 2
     mask = np.zeros((rows, cols), np.uint8)
     rr, cc = np.ogrid[:rows, :cols]
     distance = np.sqrt((rr - crow) ** 2 + (cc - ccol) ** 2)
-    mask[distance < lowpass_radius] = 1
-    fshift = fshift * mask
+    # lowpass = 1 / (1 + (distance / cutoff) ** (2 * order))
+    lowpass = np.exp(-distance**2 / (2*cutoff**2))
+    fshift = fshift * lowpass
+    # mask[distance < lowpass_radius] = 1
+    # fshift = fshift * mask
     fourier_transform = np.fft.ifftshift(fshift)
 
     # 计算傅立叶变换后的频谱
@@ -97,12 +99,10 @@ def texture_suppression(img, max_spec_amp = 0.0001,max_distance_to_center = 800 
     if debug: cv2.imwrite("reconstructed_image.jpg",reconstructed_image)
     return reconstructed_image
 
-
 debug = False
-
 if __name__ == '__main__':
     if debug:
-        img = cv2.imread("Visualize/斜纹/20210116_164449_Main_0_4_W128_Org.jpg")
+        img = cv2.imread("Visualize/斜纹/20210116_164538_Main_0_4_W128_Org.jpg")
         output = texture_suppression(img,debug=True)
     else:
         data_path = "Visualize/"

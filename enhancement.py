@@ -5,7 +5,6 @@ from scipy.interpolate import Rbf
 import os
 from tqdm import tqdm
 
-
 SCALE = 8
 
 def fit_curve(brightness_values, coordinates):
@@ -39,7 +38,7 @@ def apply_curve(image):
 MURA_TYPE = ['色斑', '条带', '白团', '黑斑', '污渍', '斜纹']
 
 def localEqualHist(image):
-    clahe = cv2.createCLAHE(clipLimit=5, tileGridSize=(7,7))
+    clahe = cv2.createCLAHE(clipLimit=5, tileGridSize=(4,4))
     dst = clahe.apply(image)
     return dst
 
@@ -55,7 +54,6 @@ def global_EuqualHist(image,threshold = 50):
     # 对大于阈值的像素进行直方图均衡化
     equalized_image = np.interp(image, range(256), cdf_normalized)
     return equalized_image
-
 
 
 def show_hist(img,equ,figname="histogram"):
@@ -115,42 +113,53 @@ def enhancement(img,gamma_black=1.5,gamma_white=0.5,debug=False, mura_type='黑�
     #     cv2.imwrite('Enhanced_Image1.jpg', equ1)
     #     show_hist(equ,equ1,"histogram_1")
 
-    def gamma_correction(image, gamma):
-        # 标准化像素值到[0, 1]范围
-        image = image / 255.0
-        # 应用gamma变换
-        corrected_image = np.power(image, gamma)
-        # 将像素值重新缩放到[0, 255]范围
-        corrected_image = (corrected_image * 255).astype(np.uint8)
-        return corrected_image
+    # def gamma_correction(image, gamma):
+    #     # 标准化像素值到[0, 1]范围
+    #     image = image / 255.0
+    #     # 应用gamma变换
+    #     corrected_image = np.power(image, gamma)
+    #     # 将像素值重新缩放到[0, 255]范围
+    #     corrected_image = (corrected_image * 255).astype(np.uint8)
+    #     return corrected_image
 
-    if mura_type in ['色斑', '黑斑', '污渍']:
-        corrected = gamma_correction(equ1, gamma_white)
-        if debug:cv2.imwrite('gamma_corrected_black.jpg', corrected)
-    elif mura_type in ['条带', '白团', '斜纹']:
-        corrected = gamma_correction(equ1, gamma_black)
-        if debug:cv2.imwrite('gamma_corrected_white.jpg', corrected)
+    # if mura_type in ['色斑', '黑斑', '污渍']:
+    #     corrected = gamma_correction(equ1, gamma_white)
+    #     if debug:cv2.imwrite('gamma_corrected_black.jpg', corrected)
+    # elif mura_type in ['条带', '白团', '斜纹']:
+    #     corrected = gamma_correction(equ1, gamma_black)
+    #     if debug:cv2.imwrite('gamma_corrected_white.jpg', corrected)
+    corrected = equ1
 
     kernel_size = 5
     blurred_image = cv2.medianBlur(corrected, kernel_size)
+    # blurred_image = amp_medianBlur_gray(corrected)
     if debug:cv2.imwrite('blurred_image.jpg', blurred_image)
 
-    output = None
-    if mura_type in ['色斑', '黑斑', '污渍', '白团']:
-        output = blurred_image
-    elif mura_type in ['条带', '斜纹']:
-        # output = directional_enhancement(blurred_image)
-        output = blurred_image
-        # if debug:cv2.imwrite('directional_enhancement.jpg', output)
+
+    # if mura_type is '黑斑':
+    # print(mura_type)
+    eroded_kernal = 11
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (eroded_kernal, eroded_kernal))
+    eroded_image = cv2.erode(blurred_image, kernel)
+    if debug:cv2.imwrite('Eroded_Image.jpg', eroded_image)
+
+    dilate_kernel_size = 11
+    dilate_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_kernel_size, dilate_kernel_size))
+    dilated_image = cv2.dilate(eroded_image, dilate_kernel)
+    if debug:cv2.imwrite('Dilated_image.jpg', dilated_image)
+
+    output = dilated_image
     return output
 
-debug = False
+debug = True
 
 if __name__ == '__main__':
     if debug:
-        # img = cv2.imread('Texture/色斑/20200623_152207_Sub_1_0_W255_Org.jpg', cv2.IMREAD_GRAYSCALE)
-        img = cv2.imread('Enhance/条带/20210313_104153_1_W128.jpg', cv2.IMREAD_GRAYSCALE)
-        out = enhancement(img,debug=True,mura_type='条带')
+        # img = cv2.imread('Texture/斜纹/20210116_165013_Main_0_4_W128_Org.jpg', cv2.IMREAD_GRAYSCALE) #斜纹，不明显
+        img = cv2.imread('Texture/黑斑/20210622_152757_Main_0_0_W255_Org.jpg', cv2.IMREAD_GRAYSCALE) #黑点，效果好
+        # img = cv2.imread('Texture/色斑/20200623_152207_Sub_1_0_W255_Org.jpg', cv2.IMREAD_GRAYSCALE) #色斑附带白带
+        # img = cv2.imread('Texture/白团/20210116_150440_Main_0_5_W64_Org.jpg', cv2.IMREAD_GRAYSCALE) #包团加噪声
+        out = enhancement(img,debug=True,mura_type='白团')
     else:
         data_path = "Texture/"
         problem_list = os.listdir(data_path)
